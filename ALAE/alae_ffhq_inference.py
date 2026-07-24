@@ -21,7 +21,7 @@ import torch
 import os
 from tqdm import tqdm
 
-# torch.set_default_device("cuda")
+torch.set_default_device("cuda")
 
 def load_model(default_config, training_artifacts_dir):
     lreq.use_implicit_lreq.set(True)
@@ -69,7 +69,7 @@ def load_model(default_config, training_artifacts_dir):
     cfg.merge_from_list(args.opts)
     cfg.freeze()
 
-#     torch.cuda.set_device(0)
+    torch.cuda.set_device(0)
     model = Model(
         startf=cfg.MODEL.START_CHANNEL_COUNT,
         layer_count=cfg.MODEL.LAYER_COUNT,
@@ -81,7 +81,7 @@ def load_model(default_config, training_artifacts_dir):
         channels=cfg.MODEL.CHANNELS,
         generator=cfg.MODEL.GENERATOR,
         encoder=cfg.MODEL.ENCODER)
-#     model.cuda(0)
+    model.cuda(0)
     model.eval()
     model.requires_grad_(False)
 

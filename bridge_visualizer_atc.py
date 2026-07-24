@@ -13,9 +13,7 @@ else:
     raise ValueError
 
 np.random.seed(seed=1)
-directory_ref = "contactubs_images"
-# directory_ref = "conditional_flowmatching"
-# directory_ref = "var_images"
+directory_ref = "conditional_flowmatching"
 print("directory_ref: ", directory_ref)
 model = load_model("ALAE/configs/ffhq.yaml", training_artifacts_dir="ALAE/training_artifacts/ffhq/")
 model = model.to(device)
@@ -24,8 +22,8 @@ model.eval()
 x0_path = os.path.join(directory_ref, "x0.npy")
 xpred_path = os.path.join(directory_ref, "x_pred.npy")
 
-x0 = np.load(x0_path)
-x_pred = np.load(xpred_path)
+x0 = np.load(x0_path)[:2000]
+x_pred = np.load(xpred_path)[:2000]
 
 print("x0: ", x0.shape)
 print("x_pred: ", x_pred.shape)
@@ -35,15 +33,17 @@ num_steps = 5
 
 # choose random identities
 # inds = np.random.choice(x_pred.shape[1], num_samples, replace=False)
-inds = (0, 1, 2, 3, 4, 5, 6, 10, 11, 12)
+inds = (0, 17, 41, 12, 4, 14, 39, 44, 30, 34)
+# inds = (0, 1, 13, 11, 4, 14, 16, 12, 8, 9)
+# inds = (17, 18, 19, 20, 21, 22, 23, 24, 25, 26)
+# inds = (27, 28, 29, 30, 31, 32, 33, 34, 35, 36)
+# inds = (37, 38, 39, 40, 41, 42, 43, 44, 45, 46)
 
 # choose time indices
 time_inds = np.linspace(0, x_pred.shape[0] - 1, num_steps).astype(int)
 
 # select trajectories
 selected_latents = x_pred[time_inds][:, inds]      # (steps, samples, 512)
-selected_latents[-2, 3, :] = x_pred[-6, 3, :]
-selected_latents[-1, 3, :] = x_pred[-4, 3, :]
 selected_latents = selected_latents.transpose(1, 0, 2)  # (samples, steps, 512)
 
 decoded_all = []
@@ -86,15 +86,13 @@ save_path = os.path.join(directory_ref, "transition_grid.png")
 plt.savefig(save_path, dpi=300, bbox_inches="tight")
 plt.close()
 
-"""
 fake_images = decode_latents(model, x_pred[-1], device)
-INPUT_DATA = "CHILDREN" 
-TARGET_DATA = "ADULT"
-train_size = 10000
+INPUT_DATA = "ADULT" # MAN, WOMAN, ADULT, CHILDREN
+TARGET_DATA = "CHILDREN" # MAN, WOMAN, ADULT, CHILDREN
+train_size = 20000
 test_size = 2000
 _, Y_train, _, _ = load_data(train_size, test_size, INPUT_DATA, TARGET_DATA)
 real_images = decode_latents(model, Y_train, device)
 
 fid_score = calculate_fid(real_images, fake_images, device)
 print("FID score:", fid_score)
-"""
