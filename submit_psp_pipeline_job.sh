@@ -16,8 +16,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-WALLTIME="24:00"
-NCPUS=2
+WALLTIME="8:00"
+NCPUS=1
 MEM=32000
 
 output_dir="job_outputs"
@@ -35,6 +35,7 @@ pipeline_args="$*"
   echo "#BSUB -J ${job_name}"
   echo "#BSUB -o ${output_dir}/${job_name}.%J.stdout"
   echo "#BSUB -e ${output_dir}/${job_name}.%J.stderr"
+  echo "#BSUB -P BH-000363-04"
   echo "#BSUB -W ${WALLTIME}"
   echo "#BSUB -n ${NCPUS}"
   echo "#BSUB -M ${MEM}"
