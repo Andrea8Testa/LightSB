@@ -18,19 +18,27 @@
 # index-for-index with data/age.npy / data/gender.npy (both produced by
 # step 1), which is exactly what dataset.py's FFHQPSPDataset expects.
 #
+# Every step is run through `uv run` against the ContactUBS project (same
+# torch/numpy/tqdm/matplotlib env used for training). ALAE and the
+# downloaders additionally need yacs/gdown/requests, which aren't
+# ContactUBS dependencies - they're layered on top per-invocation via
+# `uv run --with`, without touching ContactUBS's pyproject.toml/uv.lock.
+#
 # Usage:
 #   ./run_psp_pipeline.sh              # full run
 #   ./run_psp_pipeline.sh --limit 200  # smoke test on the first 200 latents
 #
 # Env overrides:
-#   PYTHON_BIN=python3.10 ./run_psp_pipeline.sh
+#   UV_PROJECT=../../ContactUBS ./run_psp_pipeline.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+UV_PROJECT="${UV_PROJECT:-../../ContactUBS}"
+EXTRA_DEPS=(--with yacs --with gdown --with requests)
+PY_RUN=(uv run --project "$UV_PROJECT" "${EXTRA_DEPS[@]}" python)
 
 LIMIT_ARGS=()
 if [[ "${1:-}" == "--limit" ]]; then
@@ -41,24 +49,18 @@ if [[ "${1:-}" == "--limit" ]]; then
     LIMIT_ARGS=(--limit "$2")
 fi
 
-echo "== [0/5] Checking dependencies =="
-"$PYTHON_BIN" -c "import torch, numpy, tqdm" || {
-    echo "error: torch/numpy/tqdm must already be installed in $PYTHON_BIN" >&2
+echo "== [0/5] Checking environment (uv project: $UV_PROJECT) =="
+"${PY_RUN[@]}" -c "import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)" || {
+    echo "error: no CUDA GPU visible inside the uv env (both ALAE decoding and pSp encoding require one)" >&2
     exit 1
 }
-"$PYTHON_BIN" -c "import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)" || {
-    echo "error: no CUDA GPU visible to $PYTHON_BIN (both ALAE decoding and pSp encoding require one)" >&2
-    exit 1
-}
-"$PYTHON_BIN" -c "import gdown" 2>/dev/null || "$PYTHON_BIN" -m pip install gdown
-"$PYTHON_BIN" -c "import requests" 2>/dev/null || "$PYTHON_BIN" -m pip install requests
 
 echo "== [1/5] Downloading ALAE latents + age/gender labels =="
 mkdir -p data
 if [[ -f data/latents.npy && -f data/age.npy && -f data/gender.npy && -f data/test_images.npy ]]; then
     echo "data/{latents,age,gender,test_images}.npy already present, skipping."
 else
-    "$PYTHON_BIN" download_data.py
+    "${PY_RUN[@]}" download_data.py
 fi
 
 echo "== [2/5] Downloading ALAE FFHQ decoder checkpoint =="
@@ -67,7 +69,7 @@ mkdir -p ALAE/training_artifacts/ffhq
 if [[ -f ALAE/training_artifacts/ffhq/model_157.pth ]]; then
     echo "ALAE FFHQ checkpoint already present, skipping."
 else
-    "$PYTHON_BIN" - <<'PYEOF'
+    "${PY_RUN[@]}" - <<'PYEOF'
 import os
 import gdown
 import requests
@@ -103,7 +105,7 @@ PSP_CKPT="../pixel2style2pixel/pretrained_models/psp_ffhq_encode.pt"
 if [[ -f "$PSP_CKPT" ]]; then
     echo "pSp FFHQ encoder checkpoint already present, skipping."
 else
-    "$PYTHON_BIN" -c "
+    "${PY_RUN[@]}" -c "
 import sys, gdown
 gdown.download('https://drive.google.com/uc?id=1bMTNWkh5LArlaWSc_wa8VKyq2V42T2z0', sys.argv[1], quiet=False)
 " "$PSP_CKPT"
@@ -113,17 +115,17 @@ echo "== [4/5] Decoding ALAE latents -> 256x256 face images (ALAE decoder) =="
 if [[ ${#LIMIT_ARGS[@]} -eq 0 && -f data/psp_input_images_256.npy ]]; then
     echo "data/psp_input_images_256.npy already present, skipping."
 else
-    "$PYTHON_BIN" decode_alae_to_images.py "${LIMIT_ARGS[@]}"
+    "${PY_RUN[@]}" decode_alae_to_images.py "${LIMIT_ARGS[@]}"
 fi
 
 echo "== [5/5] Encoding face images -> pSp W+ latents (pSp encoder) =="
 if [[ ${#LIMIT_ARGS[@]} -eq 0 && -f data/psp_latents.npy ]]; then
     echo "data/psp_latents.npy already present, skipping."
 else
-    "$PYTHON_BIN" encode_psp_latents.py
+    "${PY_RUN[@]}" encode_psp_latents.py
 fi
 
 echo
 echo "Done. data/psp_latents.npy is ready, aligned with data/age.npy / data/gender.npy."
 echo "Train ContactUBS on it with:"
-echo "  (cd ../../ContactUBS && python main.py --params ffhq_psp)"
+echo "  (cd ../../ContactUBS && uv run python main.py --params ffhq_psp)"
