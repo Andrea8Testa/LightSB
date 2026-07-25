@@ -49,6 +49,21 @@ if [[ "${1:-}" == "--limit" ]]; then
     LIMIT_ARGS=(--limit "$2")
 fi
 
+# A file that "exists" but was left behind by a job killed mid-np.save (OOM,
+# walltime) is worse than a missing one: it looks done and silently poisons
+# the next stage. mmap_mode='r' fails fast on a truncated file without
+# reading the whole array back in.
+npy_ok() {
+    "${PY_RUN[@]}" -c "
+import sys
+import numpy as np
+try:
+    np.load(sys.argv[1], mmap_mode='r').shape
+except Exception:
+    sys.exit(1)
+" "$1" >/dev/null 2>&1
+}
+
 echo "== [0/5] Checking environment (uv project: $UV_PROJECT) =="
 "${PY_RUN[@]}" -c "import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)" || {
     echo "error: no CUDA GPU visible inside the uv env (both ALAE decoding and pSp encoding require one)" >&2
@@ -57,8 +72,8 @@ echo "== [0/5] Checking environment (uv project: $UV_PROJECT) =="
 
 echo "== [1/5] Downloading ALAE latents + age/gender labels =="
 mkdir -p data
-if [[ -f data/latents.npy && -f data/age.npy && -f data/gender.npy && -f data/test_images.npy ]]; then
-    echo "data/{latents,age,gender,test_images}.npy already present, skipping."
+if npy_ok data/latents.npy && npy_ok data/age.npy && npy_ok data/gender.npy && npy_ok data/test_images.npy; then
+    echo "data/{latents,age,gender,test_images}.npy already present and valid, skipping."
 else
     "${PY_RUN[@]}" download_data.py
 fi
@@ -112,15 +127,15 @@ gdown.download('https://drive.google.com/uc?id=1bMTNWkh5LArlaWSc_wa8VKyq2V42T2z0
 fi
 
 echo "== [4/5] Decoding ALAE latents -> 256x256 face images (ALAE decoder) =="
-if [[ ${#LIMIT_ARGS[@]} -eq 0 && -f data/psp_input_images_256.npy ]]; then
-    echo "data/psp_input_images_256.npy already present, skipping."
+if [[ ${#LIMIT_ARGS[@]} -eq 0 ]] && npy_ok data/psp_input_images_256.npy; then
+    echo "data/psp_input_images_256.npy already present and valid, skipping."
 else
     "${PY_RUN[@]}" decode_alae_to_images.py "${LIMIT_ARGS[@]}"
 fi
 
 echo "== [5/5] Encoding face images -> pSp W+ latents (pSp encoder) =="
-if [[ ${#LIMIT_ARGS[@]} -eq 0 && -f data/psp_latents.npy ]]; then
-    echo "data/psp_latents.npy already present, skipping."
+if [[ ${#LIMIT_ARGS[@]} -eq 0 ]] && npy_ok data/psp_latents.npy; then
+    echo "data/psp_latents.npy already present and valid, skipping."
 else
     "${PY_RUN[@]}" encode_psp_latents.py
 fi

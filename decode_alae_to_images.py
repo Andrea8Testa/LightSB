@@ -63,5 +63,7 @@ with torch.no_grad():
         out_images[i:i + img.shape[0]] = img
 
 os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-np.save(args.out, out_images)
+tmp_out = args.out + ".tmp.npy"  # np.save always appends .npy; keep it on the tmp name too
+np.save(tmp_out, out_images)
+os.replace(tmp_out, args.out)  # atomic: never leaves a truncated file at args.out
 print(f"Saved {out_images.shape} uint8 array to {args.out}")

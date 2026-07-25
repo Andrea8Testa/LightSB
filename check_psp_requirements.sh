@@ -8,28 +8,51 @@
 #   - pSp FFHQ checkpoint   (encodes images into pSp W+ latents)
 #   - pSp-derived data      (the pipeline's intermediate/final npy outputs)
 #
+# .npy files are opened with mmap_mode='r' (not just stat'd) so a file left
+# behind by a job killed mid-np.save (OOM, walltime) - which "exists" but is
+# truncated - is correctly reported as missing/broken instead of done.
+#
 # Usage: ./check_psp_requirements.sh
-# Exit code: 0 if everything is present, 1 if anything is missing.
+# Exit code: 0 if everything is present and valid, 1 otherwise.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+UV_PROJECT="${UV_PROJECT:-../../ContactUBS}"
+PY_RUN=(uv run --project "$UV_PROJECT" python)
+
 ok=0
 missing=0
 
+npy_ok() {
+    "${PY_RUN[@]}" -c "
+import sys
+import numpy as np
+try:
+    np.load(sys.argv[1], mmap_mode='r').shape
+except Exception:
+    sys.exit(1)
+" "$1" >/dev/null 2>&1
+}
+
 check() {
     local label="$1" path="$2"
-    if [[ -f "$path" ]]; then
-        local size
-        size=$(du -h "$path" 2>/dev/null | cut -f1)
-        printf "  [x] %-24s %-45s (%s)\n" "$label" "$path" "$size"
-        ok=$((ok + 1))
-    else
+    if [[ ! -s "$path" ]]; then
         printf "  [ ] %-24s %-45s (missing)\n" "$label" "$path"
         missing=$((missing + 1))
+        return
     fi
+    if [[ "$path" == *.npy ]] && ! npy_ok "$path"; then
+        printf "  [ ] %-24s %-45s (present but truncated/corrupt)\n" "$label" "$path"
+        missing=$((missing + 1))
+        return
+    fi
+    local size
+    size=$(du -h "$path" 2>/dev/null | cut -f1)
+    printf "  [x] %-24s %-45s (%s)\n" "$label" "$path" "$size"
+    ok=$((ok + 1))
 }
 
 echo "== ALAE latent data =="
@@ -54,11 +77,11 @@ check "pSp W+ latents"         data/psp_latents.npy
 echo
 echo "-----------------------------------------------------"
 if [[ $missing -eq 0 ]]; then
-    echo "All $ok artifacts present."
+    echo "All $ok artifacts present and valid."
     echo "Ready to train: (cd ../../ContactUBS && uv run python main.py --params ffhq_psp)"
     exit 0
 else
-    echo "$ok present, $missing missing."
+    echo "$ok present, $missing missing/broken."
     echo "Run ./run_psp_pipeline.sh (or submit_psp_pipeline_job.sh) to fetch/generate what's missing."
     exit 1
 fi

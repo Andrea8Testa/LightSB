@@ -74,5 +74,7 @@ with torch.no_grad():
         out_latents[i:i + codes.shape[0]] = codes.cpu().numpy()
 
 os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-np.save(args.out, out_latents)
+tmp_out = args.out + ".tmp.npy"  # np.save always appends .npy; keep it on the tmp name too
+np.save(tmp_out, out_latents)
+os.replace(tmp_out, args.out)  # atomic: never leaves a truncated file at args.out
 print(f"Saved {out_latents.shape} float32 array to {args.out}")
