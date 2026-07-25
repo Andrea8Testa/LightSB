@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 from alae_ffhq_inference import load_model, encode, decode
@@ -75,12 +76,15 @@ def calculate_fid(real_images, fake_images, device):
 
     return fid
 
+_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
+
 def load_data(train_size, test_size, input_data, target_data, seed=0):
     np.random.seed(seed=seed)
-    latents = np.load("/home/tea1rng/unbalanced_workspace/baselines/LightSB/data/latents.npy")
-    gender = np.load("/home/tea1rng/unbalanced_workspace/baselines/LightSB/data/gender.npy")
-    age = np.load("/home/tea1rng/unbalanced_workspace/baselines/LightSB/data/age.npy")
-    test_inp_images = np.load("/home/tea1rng/unbalanced_workspace/baselines/LightSB/data/test_images.npy")
+    latents = np.load(os.path.join(_DATA_DIR, "latents.npy"))
+    gender = np.load(os.path.join(_DATA_DIR, "gender.npy"))
+    age = np.load(os.path.join(_DATA_DIR, "age.npy"))
+    test_inp_images = np.load(os.path.join(_DATA_DIR, "test_images.npy"))
 
     train_latents, test_latents = latents[:train_size], latents[-test_size:]
     train_gender, test_gender = gender[:train_size], gender[-test_size:]
