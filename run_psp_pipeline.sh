@@ -20,9 +20,13 @@
 #
 # Every step is run through `uv run` against the ContactUBS project (same
 # torch/numpy/tqdm/matplotlib env used for training). ALAE and the
-# downloaders additionally need yacs/gdown/requests, which aren't
-# ContactUBS dependencies - they're layered on top per-invocation via
-# `uv run --with`, without touching ContactUBS's pyproject.toml/uv.lock.
+# downloaders additionally need yacs/gdown/requests, and pixel2style2pixel's
+# stylegan2 op module unconditionally imports torch.utils.cpp_extension
+# (needs setuptools, not bundled by default in modern venvs) even though the
+# native kernel it tries to JIT-compile is optional (falls back to a pure
+# PyTorch implementation) - none of these are ContactUBS dependencies, so
+# they're layered on top per-invocation via `uv run --with`, without
+# touching ContactUBS's pyproject.toml/uv.lock.
 #
 # Usage:
 #   ./run_psp_pipeline.sh              # full run
@@ -37,7 +41,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 UV_PROJECT="${UV_PROJECT:-../../ContactUBS}"
-EXTRA_DEPS=(--with yacs --with gdown --with requests)
+EXTRA_DEPS=(--with yacs --with gdown --with requests --with setuptools)
 PY_RUN=(uv run --project "$UV_PROJECT" "${EXTRA_DEPS[@]}" python)
 
 LIMIT_ARGS=()

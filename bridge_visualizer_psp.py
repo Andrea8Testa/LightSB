@@ -4,8 +4,12 @@ ablation of the ContactUBS FFHQ experiment (params/ffhq_psp.py).
 
 Expects x0.npy / x_pred.npy produced by `python main.py --params ffhq_psp
 --model_name <run>` (copied into `directory_ref`, same convention as
-bridge_visualizer.py). Those trajectories live in the flattened 9216-d
-pSp W+ space; this script reshapes each 9216-d vector back to (18, 512)
+bridge_visualizer.py). ContactUBS's FFHQPSPDataset trains on the raw pSp
+W+ latents standardized per-dimension (see compute_psp_latent_stats() in
+ContactUBS/dataset.py) -- so x0.npy/x_pred.npy live in that *standardized*
+space. This script inverts the same transform (recomputed identically
+from data/psp_latents.npy, since that file itself is never modified) to
+get back to raw pSp W+ codes, reshapes each 9216-d vector to (18, 512),
 and runs it through the pSp decoder (not the encoder) to get an image.
 """
 import os, sys
@@ -16,6 +20,12 @@ from argparse import Namespace
 from tqdm import tqdm
 from models.psp import pSp
 from matplotlib import pyplot as plt
+
+# Must match ContactUBS.dataset.compute_psp_latent_stats() exactly.
+_raw_latents = np.load("data/psp_latents.npy").reshape(-1, 18 * 512)
+PSP_MEAN = _raw_latents.mean(axis=0)
+PSP_STD = np.maximum(_raw_latents.std(axis=0), 1e-3)
+del _raw_latents
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -71,6 +81,8 @@ time_inds = np.linspace(0, x_pred.shape[0] - 1, num_steps).astype(int)
 # select trajectories
 selected_latents = x_pred[time_inds][:, inds]      # (steps, samples, 9216)
 selected_latents = selected_latents.transpose(1, 0, 2)  # (samples, steps, 9216)
+# x_pred lives in FFHQPSPDataset's standardized space -- invert before decoding.
+selected_latents = selected_latents * PSP_STD + PSP_MEAN
 
 decoded_all = []
 
